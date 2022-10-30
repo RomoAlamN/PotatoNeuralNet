@@ -1,14 +1,30 @@
-mod neuron;
+mod activation;
 mod layers;
+mod model_info;
+mod data_set;
 
+use layers::{InputLayer, ConnectedGenericLayer, Layer};
+use activation::ActivationFunction;
+use model_info::ModelInformation;
 
-use layers::Layer;
+struct LinearActivation {
+
+}
+impl ActivationFunction for LinearActivation {
+    fn activate(f_in : f32) -> f32 {
+        f_in
+    }
+}
+
 fn main() {
-    let mut input = [0.0; 32];
+    let mut input = [0.0; 64];
+    let info = ModelInformation::new(1.0, 0.9);
+    let loss_fn = |out, expected| {out - expected};
 
-    let input_layer = Layer::<32>::new_unconnected(&input);
-    let layer1 = Layer::<128>::new_connected(&input_layer);
-    let _output_layer = Layer::<1>::new_connected(&layer1);
+    let mut input_layer = InputLayer::new(&input);
+    let mut layer1: ConnectedGenericLayer<_, LinearActivation, 128, 64> = ConnectedGenericLayer::new(&mut input_layer);
+    let mut output_layer : ConnectedGenericLayer<_, LinearActivation, 1, 128> = ConnectedGenericLayer::new(&mut layer1);
+
 
 
 
