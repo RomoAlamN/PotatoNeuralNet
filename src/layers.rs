@@ -1,5 +1,6 @@
 use crate::activation::ActivationFunction;
 use crate::model_info::ModelInformation;
+use crate::optimizer::Optimizer;
 use std::marker::PhantomData;
 
 use rand::prelude::*;
