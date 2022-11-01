@@ -7,7 +7,7 @@ mod optimizer;
 use layers::{InputLayer, ConnectedGenericLayer, Layer};
 use activation::ActivationFunction;
 use model_info::ModelInformation;
-use data_set::{DatasetLoader, Dataset};
+use data_set::{Dataset, FileSystemLoader, FileError, Datum};
 
 struct LinearActivation {
 
@@ -17,12 +17,43 @@ impl ActivationFunction for LinearActivation {
         f_in
     }
 }
+struct MatrixData {
+    data : [f32; 64]
+}
+impl Datum<f32, 64> for MatrixData {
+    fn get_data(&self) -> [f32; 64] {
+        self.data
+    }
+
+    fn from(data : Vec<u8>) -> Option<Self> {
+        if data.len() < 64 * 4 {
+            Option::None
+        }else {
+            let v = data.to_vec();
+            let data = [0.0; 64 ];
+            for i in 0..64{
+                let idx = i * 4;
+                let arr = [v[idx], v[idx + 1], v[idx+2], v[idx+3]];
+                data[i] = f32::from_le_bytes(arr);
+            }
+            Some(MatrixData{data})
+        }
+    }
+
+    fn seed(&self, receiver : &mut [f32; 64]) {
+        for i in 0..64 {
+            receiver[i] = self.data[i];
+        }
+    }
+}
 
 fn main() {
     let mut input = [0.0; 64];
     let info = ModelInformation::new(1.0, 0.9);
-    let data = Dataset::new(FolderLoader::new("data"), 0.8);
+    let data = Dataset::<MatrixData, _, 64>::new(FileSystemLoader::new("data").unwrap(), 0.8);
 
+    let seed = data.get_validation().unwrap();
+    seed.seed(&mut input);
 
     let loss_fn = |out, expected| {out - expected};
 
