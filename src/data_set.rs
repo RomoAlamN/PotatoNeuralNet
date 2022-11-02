@@ -76,7 +76,7 @@ impl <D: Datum<T, SIZE>, T, const SIZE: usize> DatasetLoader<D, T, SIZE> for Fil
     }
 
     fn has_next(&self) -> bool {
-        todo!()
+        self.current < self.paths.len()
     }
 }
 

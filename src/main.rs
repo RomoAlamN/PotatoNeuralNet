@@ -3,6 +3,7 @@ mod layers;
 mod model_info;
 mod data_set;
 mod optimizer;
+mod data_importer;
 
 use layers::{InputLayer, ConnectedGenericLayer, Layer};
 use activation::ActivationFunction;
