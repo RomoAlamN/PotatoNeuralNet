@@ -14,10 +14,11 @@ pub struct Dataset <D: Datum<T, K, SIZE>, T, K, const SIZE: usize> {
     training: Vec<usize>,
     cur_val: usize,
     cur_training: usize,
-    use_t: PhantomData<T>
+    use_t: PhantomData<T>,
+    use_k: PhantomData<K>
 }
 impl <'a, D, T, K, const SIZE: usize> Dataset<D, T, K, SIZE> where D: Datum<T, K, SIZE> {
-    pub fn new<L : DatasetLoader<D, T, K, SIZE>>(loader: L, share : f32) -> Dataset<D, T, K, SIZE> {
+    pub fn new<L : DatasetLoader<D, T, K, SIZE>>(mut loader: L, share : f32) -> Dataset<D, T, K, SIZE> {
         let mut data = vec!();
         let mut val = vec!();
         let mut train = vec!();
@@ -36,10 +37,16 @@ impl <'a, D, T, K, const SIZE: usize> Dataset<D, T, K, SIZE> where D: Datum<T, K
                 i += 1;
             }
         }
-        Dataset { data, validation: val, training: train, cur_val: 0, cur_training: 0, use_t: PhantomData }
+        Dataset { data, validation: val, training: train, cur_val: 0, cur_training: 0, use_t: PhantomData, use_k: PhantomData }
     }
-    pub fn get_validation(&mut self) -> Option<&'a D> {
+    pub fn get_validation(&'a mut self) -> Option<&'a D> {
         match self.validation.get(self.cur_val) {
+            Some(value) => Some(&self.data[value.clone()]),
+            None => None
+        }
+    }
+    pub fn get_training(&'a mut self) -> Option<&'a D> {
+        match self.training.get(self.cur_training) {
             Some(value) => Some(&self.data[value.clone()]),
             None => None
         }
@@ -55,7 +62,7 @@ pub trait Datum <T,K, const SIZE: usize> {
     fn get_data(&self) -> [T; SIZE];
     fn from(data : Vec<u8>) -> Option<Self> where Self: Sized;
     fn seed(&self, receiver : &mut [T; SIZE]);
-    fn get_classification() -> K;
+    fn get_classification(&self) -> K;
 }
 
 pub struct FileSystemLoader {
@@ -66,12 +73,14 @@ impl <D: Datum<T,K, SIZE>, T, K, const SIZE: usize> DatasetLoader<D, T,K, SIZE> 
     fn next(&mut self) -> Option<D> {
         let c = self.current;
         self.current +=1;
-        let file = match File::open(self.paths[c]) {
+        let mut file = match File::open(&self.paths[c]) {
             Ok(value) => value,
             Err(_) => return None
         };
         let mut bytes = vec!();
-        let a= file.read_to_end(&mut bytes);
+        if let Err(_) = file.read_to_end(&mut bytes) {
+            return None
+        }
 
         D::from(bytes)
     }
@@ -90,7 +99,7 @@ impl FileSystemLoader {
             Ok(value) => {
                 value
             },
-            Err(err) => {
+            Err(_) => {
                 return Result::Err(FileError::PathNotFound(String::from(path)));
             },
         };
@@ -145,7 +154,7 @@ impl FileSystemLoader {
             Ok(value) => value,
             Err(_) => return Result::Err(FileError::FileNotReadable(path.into()))
         };
-        let reader = csv::Reader::from_reader(file);
+        let mut reader = csv::Reader::from_reader(file);
         let mut paths : Vec<String> = vec!();
         for result in reader.records() {
             match result {
@@ -158,14 +167,13 @@ impl FileSystemLoader {
         Result::Ok(paths)
     }
     pub fn read_json(path : &str) -> Result<Vec<String>, FileError> {
-        let file = match File::open(path) {
+        let mut file = match File::open(path) {
             Ok(value) => value,
             Err(_) => return Result::Err(FileError::FileNotReadable(path.into()))
         };
         let mut json_cache = String::new();
-        match file.read_to_string(&mut json_cache) {
-            Ok(value) => (),
-            Err(_)=> return Err(FileError::FileNotReadable(path.into()))
+        if let Err(_) =  file.read_to_string(&mut json_cache) {
+            return Err(FileError::FileNotReadable(path.into()))
         }
 
         let object : _JsonObject = match serde_json::from_str(&json_cache) {

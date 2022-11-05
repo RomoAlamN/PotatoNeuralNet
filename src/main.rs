@@ -17,6 +17,7 @@ impl ActivationFunction for LinearActivation {
         f_in
     }
 }
+#[derive(Copy, Clone)]
 enum Classification{
     Triangle, NotTriangle
 }
@@ -34,7 +35,7 @@ impl Datum<f32, Classification, 64> for MatrixData {
             Option::None
         }else {
             let v = data.to_vec();
-            let data = [0.0; 64 ];
+            let mut data = [0.0; 64 ];
             for i in 0..64{
                 let idx = i * 4;
                 let arr = [v[idx], v[idx + 1], v[idx+2], v[idx+3]];
@@ -55,17 +56,23 @@ impl Datum<f32, Classification, 64> for MatrixData {
             receiver[i] = self.data[i];
         }
     }
+
+    fn get_classification(&self) -> Classification {
+        self.classification
+    }
 }
 
 fn main() {
     let mut input = [0.0; 64];
     let info = ModelInformation::new(1.0, 0.9);
-    let data = Dataset::<MatrixData, _, 64>::new(FileSystemLoader::new("data").unwrap(), 0.8);
+    let mut data = Dataset::<MatrixData, _, _,  64>::new(FileSystemLoader::new("data").unwrap(), 0.8);
 
     let seed = data.get_validation().unwrap();
     seed.seed(&mut input);
+    let seed = data.get_training().unwrap();
+    seed.seed(&mut input);
 
-    let loss_fn = |out, expected| {out - expected};
+//    let loss_fn = |out, expected| {out - expected};
 
     let mut input_layer = InputLayer::new(&input);
     let mut layer1: ConnectedGenericLayer<_, LinearActivation, 128, 64> = ConnectedGenericLayer::new(&mut input_layer);
