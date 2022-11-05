@@ -8,7 +8,7 @@
 use rand::prelude::*;
 use std::marker::PhantomData;
 
-pub struct Dataset <D: Datum<T, SIZE>, T, const SIZE: usize> {
+pub struct Dataset <D: Datum<T, K, SIZE>, T, K, const SIZE: usize> {
     data : Vec<D>,
     validation : Vec<usize>,
     training: Vec<usize>,
@@ -16,8 +16,8 @@ pub struct Dataset <D: Datum<T, SIZE>, T, const SIZE: usize> {
     cur_training: usize,
     use_t: PhantomData<T>
 }
-impl <'a, D, T, const SIZE: usize> Dataset<D, T, SIZE> where D: Datum<T, SIZE> {
-    pub fn new<L : DatasetLoader<D, T, SIZE>>(loader: L, share : f32) -> Dataset<D, T, SIZE> {
+impl <'a, D, T, K, const SIZE: usize> Dataset<D, T, K, SIZE> where D: Datum<T, K, SIZE> {
+    pub fn new<L : DatasetLoader<D, T, K, SIZE>>(loader: L, share : f32) -> Dataset<D, T, K, SIZE> {
         let mut data = vec!();
         let mut val = vec!();
         let mut train = vec!();
@@ -46,22 +46,23 @@ impl <'a, D, T, const SIZE: usize> Dataset<D, T, SIZE> where D: Datum<T, SIZE> {
     }
 }
 
-pub trait DatasetLoader<D: Datum<T, DATA_SIZE>, T, const DATA_SIZE: usize> {
+pub trait DatasetLoader<D: Datum<T,K, DATA_SIZE>, T,K,  const DATA_SIZE: usize> {
     fn next(&mut self) -> Option<D>;
     fn has_next(&self) -> bool;
 }
 
-pub trait Datum <T, const SIZE: usize> {
+pub trait Datum <T,K, const SIZE: usize> {
     fn get_data(&self) -> [T; SIZE];
     fn from(data : Vec<u8>) -> Option<Self> where Self: Sized;
     fn seed(&self, receiver : &mut [T; SIZE]);
+    fn get_classification() -> K;
 }
 
 pub struct FileSystemLoader {
     paths: Vec<String>,
     current: usize
 }
-impl <D: Datum<T, SIZE>, T, const SIZE: usize> DatasetLoader<D, T, SIZE> for FileSystemLoader {
+impl <D: Datum<T,K, SIZE>, T, K, const SIZE: usize> DatasetLoader<D, T,K, SIZE> for FileSystemLoader {
     fn next(&mut self) -> Option<D> {
         let c = self.current;
         self.current +=1;

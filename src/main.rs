@@ -17,16 +17,20 @@ impl ActivationFunction for LinearActivation {
         f_in
     }
 }
-struct MatrixData {
-    data : [f32; 64]
+enum Classification{
+    Triangle, NotTriangle
 }
-impl Datum<f32, 64> for MatrixData {
+struct MatrixData {
+    data : [f32; 64],
+    classification: Classification
+}
+impl Datum<f32, Classification, 64> for MatrixData {
     fn get_data(&self) -> [f32; 64] {
         self.data
     }
 
     fn from(data : Vec<u8>) -> Option<Self> {
-        if data.len() < 64 * 4 {
+        if data.len() < 64 * 4 + 1{
             Option::None
         }else {
             let v = data.to_vec();
@@ -36,7 +40,13 @@ impl Datum<f32, 64> for MatrixData {
                 let arr = [v[idx], v[idx + 1], v[idx+2], v[idx+3]];
                 data[i] = f32::from_le_bytes(arr);
             }
-            Some(MatrixData{data})
+            let class_id = v.last().unwrap();
+            let class_enum = if class_id.clone() > 0 {
+                Classification::NotTriangle
+            }else {
+                Classification::Triangle
+            };
+            Some(MatrixData{data, classification: class_enum})
         }
     }
 

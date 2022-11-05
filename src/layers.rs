@@ -27,7 +27,7 @@ impl <'a, const SIZE: usize> Layer for InputLayer<'a, SIZE> {
         }
     }
 
-    fn update(&mut self, info: ModelInformation) {
+    fn update(&mut self, _info: ModelInformation) {
         // do nothing (terminal layer)
     }
 }
