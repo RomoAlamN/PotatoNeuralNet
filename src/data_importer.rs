@@ -2,7 +2,7 @@ pub trait DataReader {
     fn consume<T : ConsumableType<SIZE>, const SIZE: usize>(&mut self) -> Result<T, ReadError>;
 }
 
-trait ConsumableType<const SIZE: usize> {
+pub trait ConsumableType<const SIZE: usize> {
     fn from_arr(data_in : [u8; SIZE]) -> Self;
     fn from_vec(data_in: Vec<u8>) -> Self;
 }
@@ -63,5 +63,20 @@ impl DataReader for PNGFileReader {
         }else {
             Err (ReadError::EofReached)
         }
+    }
+}
+
+impl ConsumableType<4> for f32 {
+    fn from_arr(data_in : [u8; 4]) -> Self {
+        f32::from_be_bytes(data_in)
+    }
+
+    fn from_vec(data_in: Vec<u8>) -> Self {
+        let mut arr = [0;4];
+        arr[0] = data_in[0];
+        arr[1] = data_in[1];
+        arr[2] = data_in[2];
+        arr[3] = data_in[4];
+        Self::from_arr(arr)
     }
 }
