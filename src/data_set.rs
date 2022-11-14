@@ -1,3 +1,4 @@
+use std::cell::RefCell;
 //trait Dataset {
 //    fn get_size(&self);
 //
@@ -5,84 +6,164 @@
 //    fn get_training()
 //
 //}
-use rand::prelude::*;
+use std::ffi::OsStr;
 use std::marker::PhantomData;
+use std::ops::AddAssign;
+use std::rc::Rc;
+use rand::prelude::*;
 
-pub struct Dataset <D: Datum<T, K, SIZE>, T, K, const SIZE: usize> {
-    data : Vec<D>,
-    validation : Vec<usize>,
+#[allow(dead_code)]
+pub struct Dataset<D: Datum<SIZE>, L, const SIZE: usize>
+where
+    L: DatasetLoader<D, SIZE>,
+{
+    data: Vec<ClassifiedData<D, SIZE>>,
+    validation: Vec<usize>,
     training: Vec<usize>,
-    cur_val: usize,
-    cur_training: usize,
-    use_t: PhantomData<T>,
-    use_k: PhantomData<K>
+    cur_val: Rc<RefCell<usize>>,
+    cur_training: Rc<RefCell<usize>>,
+    ld : PhantomData<L>
 }
-impl <'a, D, T, K, const SIZE: usize> Dataset<D, T, K, SIZE> where D: Datum<T, K, SIZE> {
-    pub fn new<L : DatasetLoader<D, T, K, SIZE>>(mut loader: L, share : f32) -> Dataset<D, T, K, SIZE> {
-        let mut data = vec!();
-        let mut val = vec!();
-        let mut train = vec!();
+impl<'a, D, L, const SIZE: usize> Dataset<D, L, SIZE>
+where
+    D: Datum<SIZE>,
+    L: DatasetLoader<D, SIZE>,
+{
+    pub fn new(mut loader: L, share: f32) -> Dataset<D, L, SIZE> {
+        let mut data = vec![];
+        let mut val = vec![];
+        let mut train = vec![];
         let mut rand = thread_rng();
         let mut i = 0;
         while loader.has_next() {
             let a = loader.next();
-            if let Some(x) = a{
+            if let Some(x) = a {
                 data.push(x);
 
-                if rand.gen_range(0.0..1.0) < share{
+                if rand.gen_range(0.0..1.0) < share {
                     val.push(i);
-                }else {
+                } else {
                     train.push(i);
                 }
                 i += 1;
             }
         }
-        Dataset { data, validation: val, training: train, cur_val: 0, cur_training: 0, use_t: PhantomData, use_k: PhantomData }
-    }
-    pub fn get_validation(&'a mut self) -> Option<&'a D> {
-        match self.validation.get(self.cur_val) {
-            Some(value) => Some(&self.data[value.clone()]),
-            None => None
+        Dataset {
+            data,
+            validation: val,
+            training: train,
+            cur_val: Rc::new(RefCell::new(0)),
+            cur_training: Rc::new(RefCell::new(0)),
+            ld : PhantomData
         }
     }
-    pub fn get_training(&'a mut self) -> Option<&'a D> {
-        match self.training.get(self.cur_training) {
-            Some(value) => Some(&self.data[value.clone()]),
-            None => None
-        }
+    #[allow(dead_code)]
+    pub fn get_validation(&'a self) -> Option<&'a ClassifiedData<D, SIZE>> {
+        let a = match self.validation.get(*self.cur_val.borrow()) {
+            Some(value ) => Some(&self.data[*value]),
+            None => None,
+        };
+        self.cur_val.borrow_mut().add_assign(1);
+        a
+    }
+    pub fn get_training(&'a self) -> Option<&'a ClassifiedData<D, SIZE>> {
+        let a = match self.training.get(*self.cur_training.borrow()) {
+            Some(value) => Some(&self.data[*value]),
+            None => None,
+        };
+        self.cur_training.borrow_mut().add_assign(1);
+        a
+    }
+    pub fn has_training(&self) -> bool {
+        return *self.cur_training.borrow() < self.training.len();
+    }
+    pub fn reset(&self) {
+        *self.cur_training.borrow_mut() = 0;
+        *self.cur_val.borrow_mut() = 0;
     }
 }
 
-pub trait DatasetLoader<D: Datum<T,K, DATA_SIZE>, T,K,  const DATA_SIZE: usize> {
-    fn next(&mut self) -> Option<D>;
+pub trait DatasetLoader<D : Datum<SIZE>, const SIZE: usize> {
+
+    fn next(&mut self) -> Option<ClassifiedData<D, SIZE>>;
     fn has_next(&self) -> bool;
 }
 
-pub trait Datum <T,K, const SIZE: usize> {
-    fn get_data(&self) -> [T; SIZE];
-    fn from(data : Vec<u8>) -> Option<Self> where Self: Sized;
-    fn seed(&self, receiver : &mut [T; SIZE]);
-    fn get_classification(&self) -> K;
+pub struct ClassifiedData<D : Datum<SIZE>, const SIZE : usize> {
+    data : D,
+    classification : f32
 }
+impl < D: Datum<SIZE> , const SIZE : usize> ClassifiedData<D, SIZE> {
+    pub fn get_data(&self) -> &D {
+        &self.data
+    }
+    pub fn get_class(&self) -> f32 {
+        self.classification
+    }
+}
+pub trait Datum<const SIZE: usize> : Copy {
+    type DataType;
+    type ReceiverType;
+    fn from(data: Vec<u8>) -> Option<Self>
+    where
+        Self: Sized;
+    fn seed(&self, receiver: Self::ReceiverType);
+}
+use std::path::PathBuf;
+use crate::data_importer::{PNGFileReader, DataReader, BinaryFileReader};
+
 
 pub struct FileSystemLoader {
-    paths: Vec<String>,
-    current: usize
+    paths: Vec<DataItem>,
+    current: usize,
+    root: PathBuf
 }
-impl <D: Datum<T,K, SIZE>, T, K, const SIZE: usize> DatasetLoader<D, T,K, SIZE> for FileSystemLoader {
-    fn next(&mut self) -> Option<D> {
+impl<D: Datum<SIZE>, const SIZE: usize> DatasetLoader<D, SIZE>
+    for FileSystemLoader
+{
+    fn next(&mut self) -> Option<ClassifiedData<D, SIZE>> {
         let c = self.current;
-        self.current +=1;
-        let mut file = match File::open(&self.paths[c]) {
+        self.current += 1;
+        let mut true_path = self.root.clone();
+        true_path.push(&self.paths[c].path);
+
+        let mut file = match File::open(true_path.clone()) {
             Ok(value) => value,
-            Err(_) => return None
+            Err(_) => return None,
         };
-        let mut bytes = vec!();
-        if let Err(_) = file.read_to_end(&mut bytes) {
-            return None
+        
+        if let Some("png") = true_path.extension().and_then(OsStr::to_str) {
+            let _reader = PNGFileReader::new(&mut file);
+            if let Ok(mut reader) = _reader {
+                let img = reader.consume();
+                if let Some(value) = D::from(img) {
+                    Some (
+                        ClassifiedData {
+                            data : value,
+                            classification: self.paths[c].classification
+                        }
+                    )
+                }else {
+                    None
+                }
+            }else {
+                None
+            }
+        }else {
+            let mut reader = BinaryFileReader::new(&mut file);
+            let img = reader.consume();
+            if let Some(value) = D::from(img) {
+                Some (
+                    ClassifiedData {
+                        data: value,
+                        classification: self.paths[c].classification
+                    }
+                )
+            }else {
+                None
+            }
         }
 
-        D::from(bytes)
     }
 
     fn has_next(&self) -> bool {
@@ -90,109 +171,69 @@ impl <D: Datum<T,K, SIZE>, T, K, const SIZE: usize> DatasetLoader<D, T,K, SIZE> 
     }
 }
 
-use std::fs::{File, read_dir};
+use std::fs::File;
 use std::io::prelude::*;
 
 impl FileSystemLoader {
-    pub fn new(path : &str ) -> Result<FileSystemLoader, FileError>{
+    pub fn new(path: &str) -> Result<FileSystemLoader, FileError> {
         let md = match std::fs::metadata(path) {
-            Ok(value) => {
-                value
-            },
+            Ok(value) => value,
             Err(_) => {
                 return Result::Err(FileError::PathNotFound(String::from(path)));
-            },
-        };
-        return if md.is_dir() {
-            // processes all files in the directory
-            let dir = match read_dir(path) {
-                Ok(value) => value,
-                Err(_) => return Result::Err(FileError::DirectoryNotReadable(path.into()))
-            };
-            let mut paths = vec!();
-            for path in dir {
-                // if error, ignore the file
-                match path {
-                    Ok(value) => paths.push(value.path().display().to_string()),
-                    Err(_) =>()
-                };
             }
-            Result::Ok(FileSystemLoader {
-                paths,
-                current: 0
-            })
-        } else if md.is_file() {
+        };
+        let mut a = std::path::PathBuf::new();
+        a.push(path);
+        a.pop();
+        return if md.is_file() {
             // assume path points to json or csv containing paths
-            if path.ends_with(".csv") {
-                let paths = match FileSystemLoader::read_csv(path) {
-                    Ok(value) => value,
-                    Err(_) => return Result::Err(FileError::IncorrectFormat(path.into(), "csv".into()))
-                };
-                Result::Ok(FileSystemLoader {
-                    paths,
-                    current: 0
-                })
-            }else if path.ends_with(".json") {
+            if path.ends_with(".json") {
                 let paths = match FileSystemLoader::read_json(path) {
                     Ok(value) => value,
-                    Err(_) => return Result::Err(FileError::IncorrectFormat(path.into(), "json".into()))
+                    Err(_) => {
+                        return Result::Err(FileError::IncorrectFormat(path.into(), "json".into()))
+                    }
                 };
-                Result::Ok(FileSystemLoader{
-                    paths,
-                    current: 0
-                })
-            }
-            else {
+                Result::Ok(FileSystemLoader { paths, current: 0, root: a })
+            } else {
                 Result::Err(FileError::IncorrectFormat(path.into(), "unknown".into()))
             }
         } else {
             Result::Err(FileError::PathNotDirectoryOrFile(path.into()))
-        }
-    }
-    pub fn read_csv(path: &str)-> Result<Vec<String>, FileError>{
-        let file = match File::open(path) {
-            Ok(value) => value,
-            Err(_) => return Result::Err(FileError::FileNotReadable(path.into()))
         };
-        let mut reader = csv::Reader::from_reader(file);
-        let mut paths : Vec<String> = vec!();
-        for result in reader.records() {
-            match result {
-                Ok(value) => {
-                    paths.push(value.get(0).unwrap().into());
-                },
-                Err(_) => ()
-            }
-        }
-        Result::Ok(paths)
     }
-    pub fn read_json(path : &str) -> Result<Vec<String>, FileError> {
+    pub fn read_json(path: &str) -> Result<Vec<DataItem>, FileError> {
         let mut file = match File::open(path) {
             Ok(value) => value,
-            Err(_) => return Result::Err(FileError::FileNotReadable(path.into()))
+            Err(_) => return Result::Err(FileError::FileNotReadable(path.into())),
         };
         let mut json_cache = String::new();
-        if let Err(_) =  file.read_to_string(&mut json_cache) {
-            return Err(FileError::FileNotReadable(path.into()))
+        if let Err(_) = file.read_to_string(&mut json_cache) {
+            return Err(FileError::FileNotReadable(path.into()));
         }
 
-        let object : _JsonObject = match serde_json::from_str(&json_cache) {
+        let object: JsonDataset = match serde_json::from_str(&json_cache) {
             Ok(value) => value,
-            Err(_) => return Err(FileError::IncorrectFormat(path.into(), "json".into()))
+            Err(_) => return Err(FileError::IncorrectFormat(path.into(), "json".into())),
         };
-        Result::Ok(object.names)
+        Result::Ok(object.data_items)
     }
 }
-#[derive(serde::Deserialize)]
-struct _JsonObject {
-    names : Vec<String>
+use serde::Deserialize;
+#[derive(Deserialize)]
+pub struct DataItem {
+    path: String,
+    classification: f32,
+}
+#[derive(Deserialize)]
+struct JsonDataset {
+    data_items: Vec<DataItem>,
 }
 
 #[derive(Debug)]
 pub enum FileError {
     PathNotFound(String),
     PathNotDirectoryOrFile(String),
-    DirectoryNotReadable(String),
     FileNotReadable(String),
-    IncorrectFormat(String, String)
+    IncorrectFormat(String, String),
 }

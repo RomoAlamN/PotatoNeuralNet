@@ -1,5 +1,5 @@
 pub trait DataReader {
-    fn consume<T : ConsumableType<SIZE>, const SIZE: usize>(&mut self) -> Result<T, ReadError>;
+    fn consume<T : ConsumableType<SIZE>, const SIZE: usize>(&mut self) -> Vec<T>;
 }
 
 pub trait ConsumableType<const SIZE: usize> {
@@ -9,36 +9,40 @@ pub trait ConsumableType<const SIZE: usize> {
 
 
 pub enum ReadError {
-    EofReached, FormatException
+    FormatException
 }
 
 use std::fs::File;
 use std::io::prelude::*;
-struct BinaryFileReader<'a> {
+pub struct BinaryFileReader<'a> {
     the_file : &'a mut File
 }
 impl <'a>  DataReader for BinaryFileReader<'a>{
-    fn consume<T : ConsumableType<SIZE>, const SIZE: usize>(&mut self) -> Result<T, ReadError> {
+    fn consume<T : ConsumableType<SIZE>, const SIZE: usize>(&mut self) -> Vec<T> {
+        let mut ret = vec![];
         let mut buf = [0u8; SIZE];
-        if let Err(_) = self.the_file.read_exact(&mut buf) {
-            Err(ReadError::EofReached)
-        }else {
-            Ok(T::from_arr(buf))
+        loop {
+            if let Err(_) = self.the_file.read_exact(&mut buf) {
+                break;
+            }else {
+                ret.push(T::from_arr(buf));
+            }
         }
+        ret
     }
 }
 impl <'a> BinaryFileReader<'a> {
-    fn new(f : &'a mut File) -> BinaryFileReader {
+    pub fn new(f : &'a mut File) -> BinaryFileReader {
         BinaryFileReader { the_file: f }
     }
 }
-struct PNGFileReader {
+pub struct PNGFileReader {
     buffer : Vec<u8>,
     current : usize
 }
 
 impl PNGFileReader {
-    fn new (f: &mut File) -> Result<PNGFileReader, ReadError> {
+    pub fn new (f: &mut File) -> Result<PNGFileReader, ReadError> {
         let decoder = png::Decoder::new(f);
         let mut reader = decoder.read_info().unwrap();
         let mut buf = vec![0; reader.output_buffer_size()];
@@ -52,17 +56,21 @@ impl PNGFileReader {
     }
 }
 impl DataReader for PNGFileReader {
-    fn consume<T : ConsumableType<SIZE>, const SIZE: usize>(&mut self) -> Result<T, ReadError> {
+    fn consume<T : ConsumableType<SIZE>, const SIZE: usize>(&mut self) -> Vec<T> {
+        let mut ret = vec![];
         let mut buf = [0u8; SIZE];
-        if self.buffer.len() - self.current > SIZE {
-            for i in 0..SIZE {
-                buf[i] = self.buffer[i + self.current]
+        loop {
+            if self.buffer.len() - self.current >= SIZE {
+                for i in 0..SIZE {
+                    buf[i] = self.buffer[i + self.current]
+                }
+                self.current += SIZE;
+                ret.push(T::from_arr(buf))
+            }else {
+                break;
             }
-            self.current += SIZE;
-            Ok(T::from_arr(buf))
-        }else {
-            Err (ReadError::EofReached)
         }
+        ret
     }
 }
 
@@ -78,5 +86,14 @@ impl ConsumableType<4> for f32 {
         arr[2] = data_in[2];
         arr[3] = data_in[4];
         Self::from_arr(arr)
+    }
+}
+impl ConsumableType<1> for u8 {
+    fn from_arr(data_in : [u8; 1]) -> Self {
+        data_in[0]
+    }
+
+    fn from_vec(data_in: Vec<u8>) -> Self {
+        data_in[0]
     }
 }
