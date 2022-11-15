@@ -8,6 +8,7 @@
 use rand::prelude::*;
 use std::marker::PhantomData;
 
+
 pub struct Dataset <D: Datum<T, K, SIZE>, T, K, const SIZE: usize> {
     data : Vec<D>,
     validation : Vec<usize>,
