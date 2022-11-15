@@ -51,12 +51,12 @@ impl <'a>  DataReader for BinaryFileReader<'a>{
         let mut ret = vec![];
         let mut buf = [0u8; SIZE];
         loop {
-            if let Err(_) = self.the_file.read_exact(&mut buf) {
+        if let Err(_) = self.the_file.read_exact(&mut buf) {
                 break;
-            }else {
+        }else {
                 ret.push(T::from_arr(buf));
-            }
         }
+    }
         ret
     }
 }
@@ -91,15 +91,15 @@ impl DataReader for PNGFileReader {
         let mut buf = [0u8; SIZE];
         loop {
             if self.buffer.len() - self.current >= SIZE {
-                for i in 0..SIZE {
-                    buf[i] = self.buffer[i + self.current]
-                }
-                self.current += SIZE;
-                ret.push(T::from_arr(buf))
-            }else {
-                break;
+            for i in 0..SIZE {
+                buf[i] = self.buffer[i + self.current]
             }
+            self.current += SIZE;
+                ret.push(T::from_arr(buf))
+        }else {
+                break;
         }
+    }
         ret
     }
 }
