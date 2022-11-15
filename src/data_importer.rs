@@ -1,7 +1,24 @@
+/// Represents an object that consumes an input and generates a ConsumableType.
+/// 
+/// DataReader is generally used to read input from files, such as in BinaryFileReader
+/// and PNGFileReader. They can also be set up to read data from memory, or a network, although
+/// those should be optimized by storing a buffer. 
+/// 
+/// The conversion of types is abstracted by the ConsumableType trait.
+/// 
 pub trait DataReader {
     fn consume<T : ConsumableType<SIZE>, const SIZE: usize>(&mut self) -> Vec<T>;
 }
 
+/// Represents a type that can be created from a vector or array with a certain size.
+/// 
+/// ConsumableType represents a type that can be constructed from a stream of bytes. A lot of the 
+/// integral and float types implement this trait. 
+/// 
+/// ```
+/// f32::from_arr([0x0, 0x0, 0x0, 0x0]);
+/// u32::from_vec(vec![0x0, 0x1, 0x2, 0x3]);
+/// ```
 pub trait ConsumableType<const SIZE: usize> {
     fn from_arr(data_in : [u8; SIZE]) -> Self;
     fn from_vec(data_in: Vec<u8>) -> Self;
@@ -14,6 +31,18 @@ pub enum ReadError {
 
 use std::fs::File;
 use std::io::prelude::*;
+/// Represents a packed binary file.
+/// 
+/// Consumes data from a file, then returns the ConsumableType requested.
+/// 
+/// ``` 
+/// let mut reader = BinaryFileReader::new(...);
+/// reader.consume::<f32>::();
+/// let a = reader.consume();
+/// if a > 0.0 {
+///     println!("Wow!");
+/// }
+/// ```
 pub struct BinaryFileReader<'a> {
     the_file : &'a mut File
 }
@@ -32,7 +61,8 @@ impl <'a>  DataReader for BinaryFileReader<'a>{
     }
 }
 impl <'a> BinaryFileReader<'a> {
-    pub fn new(f : &'a mut File) -> BinaryFileReader {
+    /// Creates a new BinaryFileReader from the passed file.
+    fn new(f : &'a mut File) -> BinaryFileReader {
         BinaryFileReader { the_file: f }
     }
 }
