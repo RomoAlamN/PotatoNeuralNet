@@ -11,11 +11,14 @@ pub trait Layer {
     // TODO: figure out how to pass the data needed to update smartly
     fn update(&mut self, info : ModelInformation);
 }
+use std::cell::{RefCell};
+use std::rc::Rc;
 
-pub struct InputLayer <'a, const SIZE: usize>{
-    data : [Option<&'a f32>; SIZE]
+#[derive(Clone)]
+pub struct InputLayer <const SIZE: usize>{
+    data : Rc<RefCell<[f32; SIZE]>>,
 }
-impl <'a, const SIZE: usize> Layer for InputLayer<'a, SIZE> {
+impl <'a, const SIZE: usize> Layer for InputLayer<SIZE> {
     fn calculate_state(&mut self) {
         //do nothing
     }
@@ -23,7 +26,8 @@ impl <'a, const SIZE: usize> Layer for InputLayer<'a, SIZE> {
         if idx > SIZE {
             Option::None
         }else {
-            Option::Some(self.data[idx].unwrap().clone())
+
+            Option::Some(self.data.borrow()[idx].clone())
         }
     }
 
@@ -31,33 +35,28 @@ impl <'a, const SIZE: usize> Layer for InputLayer<'a, SIZE> {
         // do nothing (terminal layer)
     }
 }
-impl <'a, const SIZE: usize> InputLayer<'a, SIZE> {
-    pub fn new(data_in : &'a [f32; SIZE]) -> InputLayer<SIZE>{
-        let mut data_out = [Option::None; SIZE];
-        for i in 0..SIZE {
-            data_out[i] = Option::Some(&data_in[i]);
-        }
-
-        InputLayer { data: data_out }
+impl <'a, const SIZE: usize> InputLayer< SIZE> {
+    pub fn new(data_in : Rc<RefCell<[f32; SIZE]>>) -> InputLayer<SIZE>{
+        InputLayer { data: data_in }
     }
 }
-
-pub struct ConnectedGenericLayer <'a, L : Layer,A: ActivationFunction, const SIZE: usize, const PREV_SIZE: usize> {
-    prev_layer : &'a mut L,
+pub struct ConnectedGenericLayer <L : Layer,A: ActivationFunction, const SIZE: usize, const PREV_SIZE: usize> {
+    prev_layer : Rc<RefCell<L>>,
     cache_data : [f32; SIZE],
-    fibers: [[f32; PREV_SIZE]; SIZE],
+    fibers: Vec<Vec<f32>>,
     a : PhantomData<A>
 }
 
-impl <'a, L, A, const SIZE: usize, const PREV_SIZE: usize> Layer for ConnectedGenericLayer<'a, L, A, SIZE, PREV_SIZE> where
+impl <'a, L, A, const SIZE: usize, const PREV_SIZE: usize> Layer for ConnectedGenericLayer<L, A, SIZE, PREV_SIZE> where
     L : Layer,
     A: ActivationFunction,
 {
     fn calculate_state(&mut self) {
+        self.prev_layer.borrow_mut().calculate_state();
         for i in 0..SIZE {
             let mut sum = 0.0;
             for j in 0..PREV_SIZE {
-                sum += self.prev_layer.get_value(j).unwrap() * self.fibers[i][j];
+                sum += self.prev_layer.borrow_mut().get_value(j).unwrap() * self.fibers[i][j];
             }
             self.cache_data[i] = A::activate(sum);
         }
@@ -71,7 +70,7 @@ impl <'a, L, A, const SIZE: usize, const PREV_SIZE: usize> Layer for ConnectedGe
     }
 
     fn update(&mut self, info: ModelInformation) {
-        self.prev_layer.update(info);
+        self.prev_layer.borrow_mut().update(info);
 
         let learning_rate = info.get_lr();
         let mut rng = thread_rng();
@@ -82,10 +81,18 @@ impl <'a, L, A, const SIZE: usize, const PREV_SIZE: usize> Layer for ConnectedGe
         }
     }
 }
-impl <'a, L, A, const SIZE: usize, const PREV_SIZE: usize> ConnectedGenericLayer<'a, L, A, SIZE, PREV_SIZE> where
+impl <'a, L, A, const SIZE: usize, const PREV_SIZE: usize> ConnectedGenericLayer< L, A, SIZE, PREV_SIZE> where
     L: Layer,
     A: ActivationFunction {
-    pub fn new(prev_layer : &'a mut L) -> ConnectedGenericLayer<'a, L, A, SIZE, PREV_SIZE>{
-        ConnectedGenericLayer { prev_layer, cache_data: [0.0; SIZE], fibers: [[1.0;PREV_SIZE];SIZE], a: PhantomData}
+    pub fn new(prev_layer : Rc<RefCell<L>>) -> ConnectedGenericLayer<L, A, SIZE, PREV_SIZE>{
+        ConnectedGenericLayer { prev_layer, cache_data: [0.0; SIZE], fibers: vec![vec![1.0;PREV_SIZE];SIZE], a: PhantomData}
     }
 }
+impl <L, A, const SIZE: usize, const PREV_SIZE : usize > Clone for ConnectedGenericLayer<L, A, SIZE, PREV_SIZE>
+where 
+    L : Layer + Clone,
+    A : ActivationFunction {
+        fn clone(&self) -> Self {
+        Self { prev_layer: Rc::new(RefCell::new(self.prev_layer.borrow().clone())), cache_data: self.cache_data.clone(), fibers: self.fibers.clone(), a: self.a.clone() }
+    }
+    }

@@ -1,4 +1,5 @@
 #[derive(Copy, Clone)]
+#[allow(dead_code)]
 pub struct ModelInformation {
     //implementation detail
     learning_rate_initial : f32,
@@ -9,6 +10,7 @@ impl ModelInformation {
     pub fn new(lr : f32, dlr : f32) -> ModelInformation {
         ModelInformation { learning_rate_initial: lr, learning_rate_current: lr, learning_rate_rate: dlr }
     }
+    #[allow(dead_code)]
     pub fn update(self) -> ModelInformation {
         ModelInformation {
             learning_rate_initial: self.learning_rate_initial,
