@@ -12,6 +12,7 @@ use std::ops::AddAssign;
 use std::rc::Rc;
 use rand::prelude::*;
 
+<<<<<<< HEAD
 #[allow(dead_code)]
 pub struct Dataset<D: Datum<SIZE>, L, const SIZE: usize>
 where
@@ -19,6 +20,11 @@ where
 {
     data: Vec<ClassifiedData<D, SIZE>>,
     validation: Vec<usize>,
+=======
+pub struct Dataset <D: Datum<T, K, SIZE>, T, K, const SIZE: usize> {
+    data : Vec<D>,
+    validation : Vec<usize>,
+>>>>>>> parent of 669d4da (Added some documentation)
     training: Vec<usize>,
     cur_val: Rc<RefCell<usize>>,
     cur_training: Rc<RefCell<usize>>,
