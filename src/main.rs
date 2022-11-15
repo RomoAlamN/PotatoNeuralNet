@@ -20,15 +20,23 @@ use std::rc::Rc;
 struct LinearActivation {}
 impl ActivationFunction for LinearActivation {
     fn activate(f_in: f32) -> f32 {
-        if f_in > 10000.0 {
-            10000.0
-        } else if f_in < -10000.0 {
-            -10000.0
+        if f_in > 1000.0 {
+            1000.0
+        } else if f_in < -1000.0 {
+            -1000.0
         }else {
             f_in
         }
     }
 }
+#[derive(Clone)]
+struct ActualLinearActivation {}
+impl ActivationFunction for ActualLinearActivation {
+    fn activate(f_in : f32) -> f32 {
+        f_in
+    }
+}
+
 #[derive(Copy, Clone)]
 struct MatrixData {
     data: [f32; 1024],
@@ -68,7 +76,7 @@ fn main() {
     let input_layer = Rc::new(RefCell::new(InputLayer::new(in_cell.clone())));
     let layer1: Rc<RefCell<ConnectedGenericLayer<_, LinearActivation, 128, 1024>>> =
         Rc::new(RefCell::new(ConnectedGenericLayer::new(input_layer)));
-    let mut output_layer: ConnectedGenericLayer<_, LinearActivation, 1, 128> =
+    let mut output_layer: ConnectedGenericLayer<_, ActualLinearActivation, 1, 128> =
         ConnectedGenericLayer::new(layer1);
 
     let mut log = vec![];
@@ -88,7 +96,7 @@ fn main() {
         let mut f1 = train(&mut bif1, in_cell.clone(), &data, &loss_fn);
         let mut f2 = train(&mut bif2, in_cell.clone(), &data, &loss_fn);
 
-        let chose_best = if rng.gen_range(0.0..1.0) < 0.05 {
+        let chose_best = if rng.gen_range(0.0..1.0) < 0.1 {
             std::mem::swap(&mut f1, &mut f2);
             false
         } else {true};
